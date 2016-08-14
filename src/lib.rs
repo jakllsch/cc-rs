@@ -645,6 +645,7 @@ impl Config {
                     "mips-unknown-linux-gnu" => Some("mips-linux-gnu"),
                     "mipsel-unknown-linux-gnu" => Some("mipsel-linux-gnu"),
                     "powerpc-unknown-linux-gnu" => Some("powerpc-linux-gnu"),
+                    "powerpc-unknown-netbsd" => Some("powerpc--netbsd"),
                     "powerpc64-unknown-linux-gnu" => Some("powerpc-linux-gnu"),
                     "powerpc64le-unknown-linux-gnu" => Some("powerpc64le-linux-gnu"),
                     "x86_64-pc-windows-gnu" => Some("x86_64-w64-mingw32"),

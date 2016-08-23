@@ -636,7 +636,7 @@ impl Config {
                     "arm-unknown-linux-gnueabihf"  => Some("arm-linux-gnueabihf"),
                     "arm-unknown-linux-musleabi" => Some("arm-linux-musleabi"),
                     "arm-unknown-linux-musleabihf"  => Some("arm-linux-musleabihf"),
-                    "armv6-unknown-netbsdelf-eabihf" => Some("arm--netbsdelf-eabihf"),
+                    "armv6-unknown-netbsdelf-eabihf" => Some("armv6--netbsdelf-eabihf"),
                     "armv7-unknown-linux-gnueabihf" => Some("arm-linux-gnueabihf"),
                     "armv7-unknown-linux-musleabihf" => Some("arm-linux-musleabihf"),
                     "armv7-unknown-netbsdelf-eabihf" => Some("armv7--netbsdelf-eabihf"),

@@ -46,12 +46,16 @@
 #![cfg_attr(test, deny(warnings))]
 #![deny(missing_docs)]
 
+#[cfg(feature = "parallel")]
+extern crate rayon;
+
 use std::env;
 use std::ffi::{OsString, OsStr};
 use std::fs;
 use std::io;
 use std::path::{PathBuf, Path};
 use std::process::{Command, Stdio};
+use std::io::{BufReader, BufRead, Write};
 
 #[cfg(windows)]
 mod registry;
@@ -325,6 +329,7 @@ impl Config {
         let dst = self.get_out_dir();
 
         let mut objects = Vec::new();
+        let mut src_dst = Vec::new();
         for file in self.files.iter() {
             let obj = dst.join(file).with_extension("o");
             let obj = if !obj.starts_with(&dst) {
@@ -332,10 +337,11 @@ impl Config {
             } else {
                 obj
             };
-            self.compile_object(file, &obj);
+            fs::create_dir_all(&obj.parent().unwrap()).unwrap();
+            src_dst.push((file.to_path_buf(), obj.clone()));
             objects.push(obj);
         }
-
+        self.compile_objects(&src_dst);
         self.assemble(lib_name, &dst.join(output), &objects);
 
         self.print(&format!("cargo:rustc-link-lib=static={}",
@@ -347,6 +353,30 @@ impl Config {
             if let Some(stdlib) = self.get_cpp_link_stdlib() {
                 self.print(&format!("cargo:rustc-link-lib={}", stdlib));
             }
+        }
+    }
+
+    #[cfg(feature = "parallel")]
+    fn compile_objects(&self, objs: &[(PathBuf, PathBuf)]) {
+        use self::rayon::prelude::*;
+
+        let mut cfg = rayon::Configuration::new();
+        if let Ok(amt) = env::var("NUM_JOBS") {
+            if let Ok(amt) = amt.parse() {
+                cfg = cfg.set_num_threads(amt);
+            }
+        }
+        drop(rayon::initialize(cfg));
+
+        objs.par_iter().weight_max().for_each(|&(ref src, ref dst)| {
+            self.compile_object(src, dst)
+        })
+    }
+
+    #[cfg(not(feature = "parallel"))]
+    fn compile_objects(&self, objs: &[(PathBuf, PathBuf)]) {
+        for &(ref src, ref dst) in objs {
+            self.compile_object(src, dst);
         }
     }
 
@@ -364,7 +394,6 @@ impl Config {
             (cmd, compiler.path.file_name().unwrap()
                           .to_string_lossy().into_owned())
         };
-        fs::create_dir_all(&dst.parent().unwrap()).unwrap();
         if msvc && is_asm {
             cmd.arg("/Fo").arg(dst);
         } else if msvc {
@@ -521,6 +550,10 @@ impl Config {
     }
 
     fn assemble(&self, lib_name: &str, dst: &Path, objects: &[PathBuf]) {
+        // Delete the destination if it exists as the `ar` tool at least on Unix
+        // appends to it, which we don't want.
+        let _ = fs::remove_file(&dst);
+
         let target = self.get_target();
         if target.contains("msvc") {
             let mut cmd = match self.archiver {
@@ -827,7 +860,23 @@ impl Tool {
 
 fn run(cmd: &mut Command, program: &str) {
     println!("running: {:?}", cmd);
-    let status = match cmd.status() {
+    // Capture the standard error coming from these programs, and write it out
+    // with cargo:warning= prefixes. Note that this is a bit wonky to avoid
+    // requiring the output to be UTF-8, we instead just ship bytes from one
+    // location to another.
+    let spawn_result = match cmd.stderr(Stdio::piped()).spawn() {
+        Ok(mut child) => {
+            let stderr = BufReader::new(child.stderr.take().unwrap());
+            for line in stderr.split(b'\n').filter_map(|l| l.ok()) {
+                print!("cargo:warning=");
+                std::io::stdout().write_all(&line).unwrap();
+                println!("");
+            }
+            child.wait()
+        }
+        Err(e) => Err(e),
+    };
+    let status = match spawn_result {
         Ok(status) => status,
         Err(ref e) if e.kind() == io::ErrorKind::NotFound => {
             let extra = if cfg!(windows) {

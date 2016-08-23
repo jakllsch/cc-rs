@@ -1,12 +1,17 @@
 # gcc-rs
 
+A library to compile C/C++ code into a Rust library/application.
+
 [![Build Status](https://travis-ci.org/alexcrichton/gcc-rs.svg?branch=master)](https://travis-ci.org/alexcrichton/gcc-rs)
 [![Build status](https://ci.appveyor.com/api/projects/status/onu270iw98h81nwv?svg=true)](https://ci.appveyor.com/project/alexcrichton/gcc-rs)
 
 [Documentation](http://alexcrichton.com/gcc-rs)
 
 A simple library meant to be used as a build dependency with Cargo packages in
-order to build a set of C files into a static archive.
+order to build a set of C/C++ files into a static archive. Note that while this
+crate is called "gcc", it actually calls out to the most relevant compile for
+a platform, for example using `cl` on MSVC. That is, this crate does indeed work
+on MSVC!
 
 ## Using gcc-rs
 
@@ -15,9 +20,7 @@ also add this crate to your `Cargo.toml` via:
 
 ```toml
 [package]
-
 # ...
-
 build = "build.rs"
 
 [build-dependencies]
@@ -90,6 +93,20 @@ build-script driver][cargo] that it has the `TARGET`, `OUT_DIR`, `OPT_LEVEL`,
 and `HOST` variables.
 
 [cargo]: http://doc.crates.io/build-script.html#inputs-to-the-build-script
+
+## Optional features
+
+Currently gcc-rs supports parallel compilation (think `make -jN`) but this
+feature is turned off by default. To enable gcc-rs to compile C/C++ in parallel,
+you can change your dependency to:
+
+```toml
+[build-dependencies]
+gcc = { version = "0.3", features = ["parallel"] }
+```
+
+By default gcc-rs will limit parallelism to `$NUM_JOBS`, or if not present it
+will limit it to the number of cpus on the machine.
 
 ## Compile-time Requirements
 

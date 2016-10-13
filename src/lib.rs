@@ -74,7 +74,7 @@ pub struct Config {
     target: Option<String>,
     host: Option<String>,
     out_dir: Option<PathBuf>,
-    opt_level: Option<u32>,
+    opt_level: Option<String>,
     debug: Option<bool>,
     env: Vec<(OsString, OsString)>,
     compiler: Option<PathBuf>,
@@ -250,7 +250,16 @@ impl Config {
     /// This option is automatically scraped from the `OPT_LEVEL` environment
     /// variable by build scripts, so it's not required to call this function.
     pub fn opt_level(&mut self, opt_level: u32) -> &mut Config {
-        self.opt_level = Some(opt_level);
+        self.opt_level = Some(opt_level.to_string());
+        self
+    }
+
+    /// Configures the optimization level of the generated object files.
+    ///
+    /// This option is automatically scraped from the `OPT_LEVEL` environment
+    /// variable by build scripts, so it's not required to call this function.
+    pub fn opt_level_str(&mut self, opt_level: &str) -> &mut Config {
+        self.opt_level = Some(opt_level.to_string());
         self
     }
 
@@ -497,6 +506,22 @@ impl Config {
             if target.starts_with("i686-unknown-linux-") {
                 cmd.args.push("-march=i686".into());
             }
+            if target.starts_with("thumb") {
+                cmd.args.push("-mthumb".into());
+
+                if target.ends_with("eabihf") {
+                    cmd.args.push("-mfloat-abi=hard".into())
+                }
+            }
+            if target.starts_with("thumbv6m") {
+                cmd.args.push("-march=armv6-m".into());
+            }
+            if target.starts_with("thumbv7em") {
+                cmd.args.push("-march=armv7e-m".into());
+            }
+            if target.starts_with("thumbv7m") {
+                cmd.args.push("-march=armv7-m".into());
+            }
         }
 
         if self.cpp && !msvc {
@@ -684,7 +709,8 @@ impl Config {
             } else if target.contains("android") {
                 format!("{}-{}", target, gnu)
             } else if self.get_host() != target {
-                let prefix = match &target[..] {
+                let cross_compile = self.getenv("CROSS_COMPILE");
+                let prefix = cross_compile.as_ref().map(String::as_str).or(match &target[..] {
                     "aarch64-unknown-linux-gnu" => Some("aarch64-linux-gnu"),
                     "arm-unknown-linux-gnueabi" => Some("arm-linux-gnueabi"),
                     "arm-unknown-linux-gnueabihf"  => Some("arm-linux-gnueabihf"),
@@ -705,12 +731,16 @@ impl Config {
                     "powerpc64-unknown-linux-gnu" => Some("powerpc-linux-gnu"),
                     "powerpc64le-unknown-linux-gnu" => Some("powerpc64le-linux-gnu"),
                     "s390x-unknown-linux-gnu" => Some("s390x-linux-gnu"),
+                    "thumbv6m-none-eabi" => Some("arm-none-eabi"),
+                    "thumbv7em-none-eabi" => Some("arm-none-eabi"),
+                    "thumbv7em-none-eabihf" => Some("arm-none-eabi"),
+                    "thumbv7m-none-eabi" => Some("arm-none-eabi"),
                     "x86_64-pc-windows-gnu" => Some("x86_64-w64-mingw32"),
                     "x86_64-rumprun-netbsd" => Some("x86_64-rumprun-netbsd"),
                     "x86_64-unknown-linux-musl" => Some("musl"),
                     "x86_64-unknown-netbsd" => Some("x86_64--netbsd"),
                     _ => None,
-                };
+                });
                 match prefix {
                     Some(prefix) => format!("{}-{}", prefix, gnu),
                     None => default.to_string(),
@@ -796,7 +826,7 @@ impl Config {
     }
 
     fn get_opt_level(&self) -> String {
-        self.opt_level.map(|s| s.to_string()).unwrap_or_else(|| {
+        self.opt_level.as_ref().cloned().unwrap_or_else(|| {
             self.getenv_unwrap("OPT_LEVEL")
         })
     }

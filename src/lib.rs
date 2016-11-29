@@ -453,10 +453,7 @@ impl Config {
                 "1" => cmd.args.push("/O1".into()),
                 _ => {}
             }
-            if target.contains("i686") {
-                cmd.args.push("/SAFESEH".into());
-            } else if target.contains("i586") {
-                cmd.args.push("/SAFESEH".into());
+            if target.contains("i586") {
                 cmd.args.push("/ARCH:IA32".into());
             }
         } else if nvcc {
@@ -496,6 +493,10 @@ impl Config {
             if target.starts_with("armv7-unknown-linux-") {
                 cmd.args.push("-march=armv7-a".into());
             }
+            if target.starts_with("armv7-linux-androideabi") {
+                cmd.args.push("-march=armv7-a".into());
+                cmd.args.push("-mfpu=vfpv3-d16".into());
+            }
             if target.starts_with("arm-unknown-linux-") {
                 cmd.args.push("-march=armv6".into());
                 cmd.args.push("-marm".into());
@@ -514,10 +515,14 @@ impl Config {
                 }
             }
             if target.starts_with("thumbv6m") {
-                cmd.args.push("-march=armv6-m".into());
+                cmd.args.push("-march=armv6s-m".into());
             }
             if target.starts_with("thumbv7em") {
                 cmd.args.push("-march=armv7e-m".into());
+
+                if target.ends_with("eabihf") {
+                    cmd.args.push("-mfpu=fpv4-sp-d16".into())
+                }
             }
             if target.starts_with("thumbv7m") {
                 cmd.args.push("-march=armv7-m".into());
@@ -607,7 +612,7 @@ impl Config {
         } else {
             let ar = self.get_ar();
             let cmd = ar.file_name().unwrap().to_string_lossy();
-            run(self.cmd(&ar).arg("crus")
+            run(self.cmd(&ar).arg("crs")
                                  .arg(dst)
                                  .args(objects)
                                  .args(&self.objects), &cmd);
@@ -709,8 +714,10 @@ impl Config {
             } else if target.contains("android") {
                 format!("{}-{}", target, gnu)
             } else if self.get_host() != target {
-                let cross_compile = self.getenv("CROSS_COMPILE");
-                let prefix = cross_compile.as_ref().map(String::as_str).or(match &target[..] {
+                // CROSS_COMPILE is of the form: "arm-linux-gnueabi-"
+                let cc_env = self.getenv("CROSS_COMPILE");
+                let cross_compile = cc_env.as_ref().map(|s| s.trim_right_matches('-'));
+                let prefix = cross_compile.or(match &target[..] {
                     "aarch64-unknown-linux-gnu" => Some("aarch64-linux-gnu"),
                     "arm-unknown-linux-gnueabi" => Some("arm-linux-gnueabi"),
                     "arm-unknown-linux-gnueabihf"  => Some("arm-linux-gnueabihf"),
@@ -726,6 +733,8 @@ impl Config {
                     "i686-unknown-netbsdelf" => Some("i486--netbsdelf"),
                     "mips-unknown-linux-gnu" => Some("mips-linux-gnu"),
                     "mipsel-unknown-linux-gnu" => Some("mipsel-linux-gnu"),
+                    "mips64-unknown-linux-gnuabi64" => Some("mips64-linux-gnuabi64"),
+                    "mips64el-unknown-linux-gnuabi64" => Some("mips64el-linux-gnuabi64"),
                     "powerpc-unknown-linux-gnu" => Some("powerpc-linux-gnu"),
                     "powerpc-unknown-netbsd" => Some("powerpc--netbsd"),
                     "powerpc64-unknown-linux-gnu" => Some("powerpc-linux-gnu"),
@@ -796,6 +805,8 @@ impl Config {
             if target.contains("msvc") {
                 None
             } else if target.contains("darwin") {
+                Some("c++".to_string())
+            } else if target.contains("freebsd") {
                 Some("c++".to_string())
             } else {
                 Some("stdc++".to_string())
